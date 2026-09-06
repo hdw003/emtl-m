@@ -15,11 +15,19 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from . import __version__
 from ._client import EMTClient
-from ._models import ApiResponse, Direction, TradeMarket, date_range, guess_market
+from ._models import (
+    ApiResponse,
+    Direction,
+    QuoteMarket,
+    TradeMarket,
+    date_range,
+    guess_market,
+    guess_quote_market,
+)
 from .errors import EMTError
 
 
@@ -28,6 +36,11 @@ def _print(payload: ApiResponse | str) -> None:
         print(payload)
         return
     print(json.dumps(payload.json, ensure_ascii=False, indent=2))
+
+
+def _to_trade_market(user_market: str) -> TradeMarket:
+    """CLI 层用户写 SH/SZ，映射到下单后端要的 HA/SA。"""
+    return TradeMarket.SH if user_market == "SH" else TradeMarket.SZ
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -64,8 +77,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         client = EMTClient(username=args.user, password=args.password)
 
         if args.command == "price":
-            market = TradeMarket(args.market) if args.market else guess_market(args.code)
-            v = client.last_price(args.code, market.value)
+            market = QuoteMarket(args.market) if args.market else guess_quote_market(args.code)
+            v = client.last_price(args.code, market)
             print(v if v == v else "nan")  # NaN 自比较为 False
             return 0
 
@@ -83,7 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     _print(client.query_funds_flow(100, st, et))
             case "buy" | "sell":
                 direction = Direction.BUY if args.command == "buy" else Direction.SELL
-                market = TradeMarket(args.market) if args.market else guess_market(args.code)
+                market = _to_trade_market(args.market) if args.market else guess_market(args.code)
                 _print(client.create_order(args.code, direction, market, args.price, args.qty))
             case "cancel":
                 print(client.cancel_order(args.order))

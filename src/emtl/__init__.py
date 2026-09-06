@@ -5,7 +5,7 @@
 """
 
 from ._client import EMTClient
-from ._models import Direction, TradeMarket
+from ._models import Direction, QuoteMarket, TradeMarket
 from .errors import (
     AuthFailedError,
     EMTError,
@@ -17,13 +17,14 @@ from .errors import (
 __version__ = "0.3.0"
 
 __all__ = [
-    "EMTClient",
+    "AuthFailedError",
     "Direction",
-    "TradeMarket",
+    "EMTClient",
     "EMTError",
     "LoginFailedError",
     "LoginRequiredError",
-    "AuthFailedError",
     "ProtocolError",
+    "QuoteMarket",
+    "TradeMarket",
     "__version__",
 ]

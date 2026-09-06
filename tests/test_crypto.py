@@ -1,4 +1,4 @@
-"""RSA 登录加密：只验输出形状与确定性，不解密（无私钥，也不应接触真实密码）。"""
+"""RSA 登录加密：只验输出形状与随机性，不解密（无私钥，也不应接触真实密码）。"""
 
 from __future__ import annotations
 
@@ -16,10 +16,12 @@ def test_encrypt_len_shape() -> None:
     assert all(c.isalnum() or c in "+/=" for c in out)
 
 
-def test_encrypt_deterministic() -> None:
+def test_encrypt_is_randomized() -> None:
+    # PKCS#1 v1.5 的 PS 填充字节是随机非零的，故同一明文两次加密密文应不同。
     a = encrypt_password("secret123")
     b = encrypt_password("secret123")
-    assert a == b  # PKCS1v15 对该固定公钥是确定性的
+    assert a != b
+    assert len(a) == len(b) == _B64_CIPHERTEXT_LEN
 
 
 def test_encrypt_differs_for_different_input() -> None:

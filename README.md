@@ -28,7 +28,7 @@ pip install -e .               # 无 OCR：登录时传 manual_code 或自定义
 ## 使用
 
 ```python
-from emtl import EMTClient, Direction, TradeMarket
+from emtl import EMTClient, Direction, QuoteMarket, TradeMarket
 
 client = EMTClient()  # 或传入 username/password；缺省读 EM_USERNAME / EM_PASSWORD
 client.login()        # 拉验证码图 → OCR → RSA 登录 → 缓存 validatekey
@@ -41,7 +41,18 @@ resp = client.create_order("600000", Direction.BUY, TradeMarket.SH, 10.21, 100)
 resp.ok          # True 当后端 Status == 0
 client.cancel_order("20240520_130662")       # 撤单
 
-client.last_price("600000", "SH")            # 行情，无需登录
+client.last_price("600000", QuoteMarket.SH)  # 行情，无需登录
+```
+
+注意两套市场码：**下单**用 `TradeMarket`（`HA`/`SA`），**行情**用 `QuoteMarket`（`SH`/`SZ`）。
+
+## 开发环境（推荐 uv + 3.12，全依赖有轮子、免本地编译）
+
+```sh
+uv python install 3.12
+uv venv --python 3.12
+uv pip install -p .venv/bin/python requests rsa pytest ruff
+.venv/bin/python -m pytest -q
 ```
 
 CLI：

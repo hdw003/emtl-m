@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
     "requests>=2.31.0",
-    "cryptography>=42.0.5",
+    "rsa>=4.9",  # 纯 Python RSA，登录密码加密（避免 cryptography 本地编译）
 ]
 
 [project.optional-dependencies]
@@ -41,7 +41,10 @@ select = [
 ]
 ignore = [
     "S101",  # pytest assert
+    "S105", "S106",  # 测试里出现的假账号/密码 fixture
     "S603", "S607",
+    "RUF001", "RUF002", "RUF003",  # 中文全角标点在 docstring/注释的误报
+    "E501",  # 中文文本行长
 ]
 [tool.ruff.lint.isort]
 known-first-party = ["emtl"]

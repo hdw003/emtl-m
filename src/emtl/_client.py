@@ -26,14 +26,14 @@ from ._config import (
     BASE_HEADERS,
     DEFAULT_QUERY_BODY,
     LOGIN_FIXED_FORM,
-    LOGIN_REFERER,
     LOGIN_PAGE,
+    LOGIN_REFERER,
     QUOTE_URL,
     URLS,
     Action,
 )
 from ._crypto import encrypt_password
-from ._models import ApiResponse, Direction, TradeMarket
+from ._models import ApiResponse, Direction, QuoteMarket, TradeMarket
 from .errors import LoginFailedError, LoginRequiredError, ProtocolError
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,8 @@ class EMTClient:
 
         self.validate_key: str | None = None
         self._session = requests.Session()
+        # 东财是大陆券商站，直连通常比走代理快且稳定；忽略环境代理。
+        self._session.trust_env = False
         headers = dict(BASE_HEADERS)
         headers.update(extra_headers or {})
         self._session.headers.update(headers)
@@ -166,11 +168,15 @@ class EMTClient:
             raise LoginRequiredError("尚未登录：先调用 login()")
 
     # ------------------------------------------------------------------ 业务
-    def last_price(self, symbol_code: str, market: str) -> float:
-        """实时行情快照：返回最新价，缺失为 NaN。"""
+    def last_price(self, symbol_code: str, market: QuoteMarket | str) -> float:
+        """实时行情快照：返回最新价，缺失为 NaN。
+
+        行情接口的市场码是 `SH`/`SZ`（与下单的 TradeMarket `HA`/`SA` 不同）。
+        """
+        market_code = market.value if isinstance(market, QuoteMarket) else str(market)
         r = self._session.get(
             QUOTE_URL,
-            params={"id": symbol_code.strip(), "market": market},
+            params={"id": symbol_code.strip(), "market": market_code},
             headers=BASE_HEADERS,
             timeout=self.timeout,
         )
