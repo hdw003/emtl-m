@@ -33,3 +33,14 @@ class ProtocolError(EMTError):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+
+
+class BusinessError(EMTError):
+    """业务被拒：后端返回非零 Status（如非交易时段、余额不足、风控拦截）。"""
+
+    def __init__(
+        self, message: str, *, status: int | None = None, detail: Any | None = None
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.detail = detail

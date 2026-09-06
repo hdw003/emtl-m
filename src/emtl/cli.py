@@ -68,6 +68,16 @@ def _build_parser() -> argparse.ArgumentParser:
     cancel = sub.add_parser("cancel", help="撤单")
     cancel.add_argument("order", help="成交日期_成交编号，如 20240520_130662")
 
+    export = sub.add_parser("export", help="申请导出记录并打印下载 URL（需登录）")
+    export.add_argument("filetype", nargs="?", default="1", help="后端导出类型（默认 1）")
+
+    credit = sub.add_parser("credit", help="融资融券（信用）持仓查询（需登录）")
+    credit.add_argument("code")
+    credit.add_argument("--market", choices=["SH", "SZ"], help="缺省按代码前缀推断")
+
+    fxqdj = sub.add_parser("fxqdj", help="风险/反洗钱测评状态（需登录）")
+    fxqdj.add_argument("biz_type", nargs="?", default="")
+
     return p
 
 
@@ -100,6 +110,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print(client.create_order(args.code, direction, market, args.price, args.qty))
             case "cancel":
                 print(client.cancel_order(args.order))
+            case "export":
+                print(client.export_history_file(args.filetype))
+            case "credit":
+                market = QuoteMarket(args.market) if args.market else guess_quote_market(args.code)
+                _print(client.credit_stock_info(args.code, market.value))
+            case "fxqdj":
+                _print(client.customer_fxqdj(args.biz_type))
             case _:
                 _build_parser().print_help(sys.stderr)
                 return 2

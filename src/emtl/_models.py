@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Literal
 
+from .errors import BusinessError
+
 
 class Direction(StrEnum):
     """交易方向。值即后端 `tradeType` 字段取值。"""
@@ -66,6 +68,26 @@ class ApiResponse:
         if isinstance(self.json, dict):
             return self.json.get("Data")
         return self.json
+
+    @property
+    def message(self) -> str | None:
+        """后端业务失败时的 Message 字段（若存在）。"""
+        if isinstance(self.json, dict):
+            msg = self.json.get("Message")
+            if isinstance(msg, str) and msg:
+                return msg
+        return None
+
+    def ensure_ok(self) -> ApiResponse:
+        """业务被拒时抛 BusinessError（带回 Message/Data 便于定位），否则返回自身。"""
+        if not self.ok:
+            detail = self.data if isinstance(self.json, dict) else None
+            raise BusinessError(
+                self.message or f"业务被拒 (Status={self.status})",
+                status=self.status,
+                detail=detail,
+            )
+        return self
 
 
 def date_range(days: int = 30, *, end: dt.date | None = None) -> tuple[str, str]:

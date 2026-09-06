@@ -18,6 +18,12 @@ class Action(StrEnum):
     QUERY_FUNDS_FLOW = "query_funds_flow"
     CREATE_ORDER = "create_order"
     CANCEL_ORDER = "cancel_order"
+    # 2026-09 官网前端实测新增端点
+    APPLY_DATA_EXPORT = "apply_data_export"
+    QUERY_DATA_EXPORT = "query_data_export"
+    GET_EM_TRADE_FILE_URL = "get_em_trade_file_url"
+    QUERY_CREDIT_STK_INFO = "query_credit_stk_info"
+    QUERY_CUSTOMER_FXQDJ = "query_customer_fxqdj"
 
 
 # 每个 URL 都以查询串开头（?validatekey= / ?randNum=），调用方负责拼接剩余部分。
@@ -32,6 +38,11 @@ URLS: dict[Action, str] = {
     Action.QUERY_FUNDS_FLOW: "https://jywg.18.cn/Search/GetFundsFlow?validatekey=",
     Action.CREATE_ORDER: "https://jywg.18.cn/Trade/SubmitTradeV2?validatekey=",
     Action.CANCEL_ORDER: "https://jywg.18.cn/Trade/RevokeOrders?validatekey=",
+    Action.APPLY_DATA_EXPORT: "https://jywg.18.cn/Com/applyDataExport?validatekey=",
+    Action.QUERY_DATA_EXPORT: "https://jywg.18.cn/Com/queryDataExport?validatekey=",
+    Action.GET_EM_TRADE_FILE_URL: "https://jywg.18.cn/Com/GetEmTradeFileUrl?validatekey=",
+    Action.QUERY_CREDIT_STK_INFO: "https://jywg.18.cn/MarginSearch/queryCreditStkInfoWEB?validatekey=",
+    Action.QUERY_CUSTOMER_FXQDJ: "https://jywg.18.cn/Com/queryCustomerFxqdj?validatekey=",
 }
 
 # 实时行情快照（独立于交易站）。

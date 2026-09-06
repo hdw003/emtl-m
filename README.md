@@ -42,9 +42,16 @@ resp.ok          # True 当后端 Status == 0
 client.cancel_order("20240520_130662")       # 撤单
 
 client.last_price("600000", QuoteMarket.SH)  # 行情，无需登录
+
+# —— 官网实测新功能（2026-09，登录后走完整 validatekey）——
+url = client.export_history_file("1")        # 导出记录三连 → 下载 URL
+client.credit_stock_info("600519", "SH")     # 融资融券(信用)持仓查询
+client.customer_fxqdj()                      # 风险/反洗钱测评状态
 ```
 
-注意两套市场码：**下单**用 `TradeMarket`（`HA`/`SA`），**行情**用 `QuoteMarket`（`SH`/`SZ`）。
+注意两套市场码：**下单**用 `TradeMarket`（`HA`/`SA`），**行情/融资融券**用 `QuoteMarket`/`SH`/`SZ`。
+
+下单默认 `strict=True`：后端拒绝（`Status != 0`）抛 `BusinessError`（带 Message/Data），传 `strict=False` 可拿原始响应自判。登录失败会带验证码换图自动重试（`login(max_attempts=3)`，手动验证码一次一试）。
 
 ## 开发环境（推荐 uv + 3.12，全依赖有轮子、免本地编译）
 
@@ -64,6 +71,9 @@ emt query orders
 emt buy 600000 10.21 100
 emt sell 600000 10.21 100 --market SH
 emt cancel 20240520_130662
+emt export 1                    # 导出记录 → 下载 URL
+emt credit 600519               # 融资融券持仓
+emt fxqdj                       # 风险/反洗钱测评状态
 ```
 
 ## 登录流程（逆向要点）
