@@ -1,0 +1,76 @@
+# emtl-m
+
+东方财富证券（`jywg.18.cn`）网页交易接口的**现代 Python** 客户端。
+
+协议逆向自 [riiy/emtl](https://github.com/riiy/emtl)（MIT）。本仓库在**保持网络协议细节不变**的前提下，
+按现代工程规范重写：类型注解、无模块级全局可变状态、依赖注入、异常分层、可选验证码求解器、可用 CLI。
+
+## 特性差异 vs 原版 riiy/emtl
+
+| 原版问题 | emtl-m 处理 |
+|---|---|
+| 模块级全局 `session` / `_em_validate_key`，仅支持单账号 | 每 `EMTClient` 实例独立 Session + validatekey，可多账号并行 |
+| 裸 `raise`、异常被吞 | 异常层级 `EMTError → LoginFailedError / LoginRequiredError / ProtocolError` |
+| `login()` 泄漏 validatekey 到日志 | 日志不再打印敏感值 |
+| 验证码强依赖 ddddocr 顶层导入 | 可注入 `CaptchaSolver`，ddddocr 延迟导入，可手动 `manual_code` |
+| 无超时 | 全请求 `timeout`（默认 20s） |
+| CLI 空壳 | 可用的 `emt` 命令：行情/查询/买卖/撤单 |
+| `logging.basicConfig(force=True)` 污染调用方 | 库不配置根日志 |
+| py3.10 混搭、缺类型 | `>=3.12`，`StrEnum` / PEP 695 / `match` / frozen+slots dataclass |
+
+## 安装
+
+```sh
+pip install -e '.[captcha]'    # ddddocr（较重的离线 OCR）为可选依赖
+pip install -e .               # 无 OCR：登录时传 manual_code 或自定义 solver
+```
+
+## 使用
+
+```python
+from emtl import EMTClient, Direction, TradeMarket
+
+client = EMTClient()  # 或传入 username/password；缺省读 EM_USERNAME / EM_PASSWORD
+client.login()        # 拉验证码图 → OCR → RSA 登录 → 缓存 validatekey
+
+client.query_asset_and_position()            # 资产持仓（.json / .ok / .data）
+client.query_orders()                        # 当日委托
+client.query_trades()                        # 当日成交
+client.query_funds_flow(100, "2026-08-01", "2026-09-01")
+resp = client.create_order("600000", Direction.BUY, TradeMarket.SH, 10.21, 100)
+resp.ok          # True 当后端 Status == 0
+client.cancel_order("20240520_130662")       # 撤单
+
+client.last_price("600000", "SH")            # 行情，无需登录
+```
+
+CLI：
+
+```sh
+emt price 600000
+emt query asset                # 需登录
+emt query orders
+emt buy 600000 10.21 100
+emt sell 600000 10.21 100 --market SH
+emt cancel 20240520_130662
+```
+
+## 登录流程（逆向要点）
+
+1. `GET /Login/YZM?randNum=<随机数>` 取验证码图 → OCR（或手动）
+2. `POST /Login/Authentication?validatekey=`，密码 RSA（PKCS1v15 + 硬编码公钥）后 Base64，
+   表单含 `randNumber`/`identifyCode`/`duration`/`type=Z`
+3. `GET /Trade/Buy` 从 `id="em_validatekey"` 抠出 validatekey
+4. 此后所有查询/下单 URL 拼接该 validatekey，表单走 `application/x-www-form-urlencoded`
+
+## ⚠️ 风险声明
+
+这是**非官方逆向接口**：东财可随时改端点/加密导致失效；高频调用有账号风控风险。
+仅建议低频率、个人研究/模拟盘场景；真实下单后果自负。MIT License。
+
+## 测试
+
+```sh
+pip install pytest
+pytest        # 离线：加密形状、模型、登录/请求构建（假传输）
+```

@@ -1,0 +1,47 @@
+[project]
+name = "emtl-m"
+version = "0.3.0"
+description = "东方财富证券(18.cn) 网页交易接口的现代 Python 客户端。逆向自 riiy/emtl(MIT)。"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31.0",
+    "cryptography>=42.0.5",
+]
+
+[project.optional-dependencies]
+captcha = ["ddddocr>=1.4.11"]
+tests = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+emt = "emtl.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/emtl"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "B", "C4", "E", "F", "I", "PIE", "PLC", "PLE", "PT", "PTH",
+    "Q", "RUF", "S", "UP", "W",
+]
+ignore = [
+    "S101",  # pytest assert
+    "S603", "S607",
+]
+[tool.ruff.lint.isort]
+known-first-party = ["emtl"]
