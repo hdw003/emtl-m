@@ -92,8 +92,7 @@ class EMTClient:
 
         self.validate_key: str | None = None
         self._session = requests.Session()
-        # 东财是大陆券商站，直连通常比走代理快且稳定；忽略环境代理。
-        self._session.trust_env = False
+        # 保留 requests 的默认行为，使用环境配置的代理和 CA 证书。
         headers = dict(BASE_HEADERS)
         headers.update(extra_headers or {})
         self._session.headers.update(headers)

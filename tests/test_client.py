@@ -48,6 +48,20 @@ def _client() -> FakeClient:
     return FakeClient(username="demo_user", password="demo_pass", solver=None)
 
 
+def test_transport_respects_environment_proxy_and_ca(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTPS_PROXY", "http://cloud-proxy.example:8080")
+    monkeypatch.setenv("https_proxy", "http://cloud-proxy.example:8080")
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/tmp/cloud-ca.pem")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+    client = EMTClient()
+    settings = client._session.merge_environment_settings(
+        "https://jywg.18.cn/Trade/Buy", {}, False, True, None
+    )
+    assert settings["proxies"]["https"] == "http://cloud-proxy.example:8080"
+    assert settings["verify"] == "/tmp/cloud-ca.pem"
+
+
 class FlakyCaptcha:
     def solve(self, image: bytes) -> str:
         return "1234"
