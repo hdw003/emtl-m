@@ -24,7 +24,13 @@ def report(result: BacktestResult, config: QuantConfig) -> dict:
         "equity_curve": [{**asdict(p), "date": str(p.date)} for p in result.curve],
         "fills": [f.as_dict() for f in result.fills],
         "events": result.events,
+        "value_pools": result.universe_history,
+        "value_status": result.value_status,
         "assumptions": {
+            "data_provider": config.data_provider,
+            "value_policy": {k: v for k, v in asdict(config.value).items() if k != "fundamentals"}
+            if config.value
+            else None,
             "data_quality": "not independently certified; corporate actions and historical universe must be verified",
             "signal": "completed daily close; execute next observed session open",
             "price_basis": "raw OHLC with explicit ex-date splits and cash dividends",

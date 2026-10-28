@@ -1,0 +1,93 @@
+# 16只主板候选股的研究示例，非全A扫描或投资推荐；可自行扩充至200只。
+data = "../../.quant/value-daily.csv"
+data_provider = "tencent" # 显式备用未复权日线源，不自动混合两家数据
+initial_cash = 1000000
+rebalance = "weekly"
+
+[value]
+fundamentals = "../../.quant/value-fundamentals.sqlite3"
+frequency = "monthly" # 可改 quarterly；每日采集与股池重排是独立频率
+top_n = 8
+max_pe = 25.0 # 最新已知年报EPS计算的PE，不是TTM
+max_pb = 3.0
+min_roe = 0.08 # 8%
+max_debt_ratio = 0.70
+min_cash_flow_per_share = 0.0
+min_listing_days = 365
+max_financial_age_days = 550
+liquidity_window = 20
+min_daily_amount = 20000000.0
+max_per_industry = 3
+earnings_weight = 0.4
+book_weight = 0.3
+quality_weight = 0.3
+excluded_industries = ["银行", "保险", "证券"]
+
+[strategy]
+name = "dual_ma" # 也可换 momentum_rotation 等已有策略
+fast = 50
+slow = 200
+
+[risk]
+max_position = 0.15
+max_gross = 0.90
+max_drawdown = 0.20
+stop_loss = 0.12
+trailing_stop = 0.15
+cooldown = 20
+
+[costs]
+commission = 0.0003
+minimum_commission = 5.0
+sell_tax = 0.0005
+slippage_bps = 10.0
+participation = 0.05
+
+[[instruments]]
+symbol = "000651.SZ"
+stamp_tax = true
+[[instruments]]
+symbol = "000333.SZ"
+stamp_tax = true
+[[instruments]]
+symbol = "600690.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600887.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600104.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600019.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600585.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "601088.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "601225.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600900.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600309.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600028.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "601668.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600406.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600741.SH"
+stamp_tax = true
+[[instruments]]
+symbol = "600066.SH"
+stamp_tax = true

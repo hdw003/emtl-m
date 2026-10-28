@@ -14,6 +14,7 @@ from statistics import mean, stdev
 from .models import Bar, Costs, EquityPoint, Fill, Instrument, Portfolio, Position, finite
 from .risk import RiskPolicy
 from .strategies import Strategy
+from .value import ValueUniverse
 
 
 @dataclass(slots=True)
@@ -25,6 +26,8 @@ class BacktestResult:
     events: list[dict] = field(default_factory=list)
     next_weights: dict[str, float] | None = None
     halted: bool = False
+    universe_history: list[dict] = field(default_factory=list)
+    value_status: dict | None = None
 
     def metrics(self) -> dict[str, float | int | None]:
         if not self.curve:
@@ -73,6 +76,7 @@ class Backtester:
         costs: Costs | None = None,
         risk: RiskPolicy | None = None,
         rebalance: str = "monthly",
+        universe: ValueUniverse | None = None,
     ) -> None:
         finite(initial_cash, "initial_cash", minimum=1)
         self.instruments = {i.symbol: i for i in instruments}
@@ -84,6 +88,7 @@ class Backtester:
         self.risk = risk or RiskPolicy()
         _period(dt.date(2020, 1, 1), rebalance)
         self.rebalance = rebalance
+        self.universe = universe
 
     def run(
         self, bars: Sequence[Bar], *, start: dt.date | None = None, end: dt.date | None = None
@@ -100,8 +105,11 @@ class Backtester:
                 raise ValueError(f"duplicate bar: {bar.date} {bar.symbol}")
             grouped[bar.date][bar.symbol] = bar
         portfolio = Portfolio(self.initial_cash)
+        if self.universe:
+            self.universe.reset()
         result = BacktestResult(self.initial_cash, portfolio)
         history: dict[str, list[float]] = {s: [] for s in self.instruments}
+        amounts: dict[str, list[float]] = {s: [] for s in self.instruments}
         prices: dict[str, float] = {}
         volumes: dict[str, float] = {}
         pending: dict[str, float] | None = None
@@ -141,6 +149,8 @@ class Backtester:
             if pending is not None:
                 self._execute(date, today, previous_prices, volumes, opening, pending, result)
             prices.update({s: b.close for s, b in today.items()})
+            for symbol, values in amounts.items():
+                values.append(today[symbol].close * today[symbol].volume if symbol in today else 0)
             for symbol, values in history.items():
                 if symbol in prices:
                     values.append(prices[symbol])
@@ -152,6 +162,11 @@ class Backtester:
             drawdown = 1 - equity / peak
             result.curve.append(EquityPoint(date, equity, portfolio.cash, drawdown))
             pending = None
+            pool_changed = False
+            if self.universe:
+                pool_changed = self.universe.update(
+                    date, prices, amounts, {s for s, b in today.items() if b.volume > 0}
+                )
             forced: set[str] = set()
             if drawdown >= self.risk.max_drawdown and not result.halted:
                 result.halted = True
@@ -173,10 +188,14 @@ class Backtester:
             period = _period(date, self.rebalance)
             if result.halted:
                 pending = {}
-            elif period != last_period:
+            elif period != last_period or pool_changed:
                 # Do not open new positions from stale or missing bars.
                 eligible = {
-                    s: values for s, values in history.items() if s in today and today[s].volume > 0
+                    s: values
+                    for s, values in history.items()
+                    if s in today
+                    and today[s].volume > 0
+                    and (self.universe is None or s in self.universe.members)
                 }
                 raw = self.strategy.weights(eligible, portfolio.weights(prices))
                 if set(raw) - set(eligible):
@@ -190,6 +209,22 @@ class Backtester:
         if not result.curve:
             raise ValueError("no sessions in the selected range")
         result.next_weights = pending
+        if self.universe:
+            result.universe_history = list(self.universe.snapshots)
+            dates = [f.known_on for f in self.universe.facts if f.symbol in self.instruments]
+            first_known = min(dates) if dates else None
+            covered = sum(p.date >= first_known for p in result.curve) if first_known else 0
+            result.value_status = {
+                "first_known_on": str(first_known) if first_known else None,
+                "sessions_with_observations": covered,
+                "total_sessions": len(result.curve),
+                "coverage": "none"
+                if covered == 0
+                else "partial"
+                if covered < len(result.curve)
+                else "observations_available_unverified",
+                "note": "No historical value performance can be inferred from sessions before first_known_on; availability does not certify completeness or correctness.",
+            }
         return result
 
     def _execute(

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from .config import QuantConfig
 from .data import load_csv
 from .engine import BacktestResult
+from .value import ValueStore
 
 
 def latest_completed_date(now: dt.datetime | None = None) -> dt.date:
@@ -39,7 +40,8 @@ def run_paper(
         )
     # Replay is intentionally simple and auditable for daily strategies. History
     # checksums reject edits to already-booked prices, actions, or fills.
-    result = config.engine().run(bars, start=config.start, end=asof)
+    facts = ValueStore(config.value.fundamentals).load() if config.value else []
+    result = config.engine(value_facts=facts).run(bars, start=config.start, end=asof)
     last_dates = {bar.symbol: bar.date for bar in bars}
     stale_positions = [
         s
@@ -50,7 +52,11 @@ def run_paper(
         raise ValueError(f"held-position data is stale by more than 10 days: {stale_positions}")
     digest = hashlib.sha256()
     by_date: dict[dt.date, str] = {}
+    fact_index = 0
     for bar in bars:
+        while fact_index < len(facts) and facts[fact_index].known_on <= bar.date:
+            digest.update(facts[fact_index].json().encode())
+            fact_index += 1
         digest.update(json.dumps(asdict(bar), sort_keys=True, default=str).encode())
         by_date[bar.date] = digest.hexdigest()
     database.parent.mkdir(parents=True, exist_ok=True)

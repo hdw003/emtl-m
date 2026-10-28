@@ -163,3 +163,51 @@ class EastmoneyDailyProvider:
         if len({b.date for b in bars}) != len(bars):
             raise ValueError("provider returned duplicate dates")
         return sorted(bars, key=lambda b: b.date)
+
+
+class TencentDailyProvider:
+    """Explicit alternative raw daily source; yearly windows avoid row truncation."""
+
+    def __init__(self, session: requests.Session | None = None, timeout: float = 20) -> None:
+        self.session = session or EastmoneyDailyProvider().session
+        self.timeout = timeout
+
+    def fetch(self, instrument: Instrument, start: dt.date, end: dt.date) -> list[Bar]:
+        if start > end:
+            raise ValueError("start must be <= end")
+        ticker = instrument.symbol[-2:].lower() + instrument.symbol[:6]
+        bars = []
+        cursor = start
+        while cursor <= end:
+            stop = min(end, dt.date(cursor.year, 12, 31))
+            response = self.session.get(
+                "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+                params={"param": f"{ticker},day,{cursor},{stop},640,"},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("code") != 0:
+                raise ValueError(f"invalid Tencent response for {instrument.symbol}")
+            series = (payload.get("data") or {}).get(ticker)
+            if not isinstance(series, dict) or "day" not in series:
+                raise ValueError(
+                    f"raw day data missing for {instrument.symbol}; adjusted data not accepted"
+                )
+            for row in series["day"]:
+                date, opening, close, high, low, volume = row[:6]
+                bar = Bar(
+                    dt.date.fromisoformat(date),
+                    instrument.symbol,
+                    float(opening),
+                    float(high),
+                    float(low),
+                    float(close),
+                    float(volume) * 100,
+                )
+                if cursor <= bar.date <= stop:
+                    bars.append(bar)
+            cursor = stop + dt.timedelta(days=1)
+        if len({b.date for b in bars}) != len(bars):
+            raise ValueError("Tencent returned duplicate daily bars")
+        return sorted(bars, key=lambda b: b.date)

@@ -5,10 +5,12 @@ from __future__ import annotations
 import datetime as dt
 import math
 import random
+from dataclasses import replace
 from pathlib import Path
 
-from .data import write_csv
+from .data import load_csv, write_csv
 from .models import Bar
+from .value import Fundamental, ValueStore
 
 DEMO_CONFIG = """# SYNTHETIC DATA ONLY: generated for functional verification, not performance claims.
 data = "bars.csv"
@@ -93,4 +95,44 @@ def create_demo(directory: Path) -> Path:
             prices[symbol] = close
     write_csv(data, bars)
     config.write_text(DEMO_CONFIG, encoding="utf-8")
+    return config
+
+
+def create_value_demo(directory: Path) -> Path:
+    """Synthetic, known-date financials combined with the existing price demo."""
+    config = create_demo(directory)
+    mapping = {"510300.SH": "600004.SH", "510500.SH": "600019.SH", "159915.SZ": "000651.SZ"}
+    write_csv(
+        directory / "bars.csv",
+        [replace(bar, symbol=mapping[bar.symbol]) for bar in load_csv(directory / "bars.csv")],
+    )
+    text = config.read_text(encoding="utf-8")
+    for before, after in mapping.items():
+        text = text.replace(before, after)
+    text = text.replace("tick_size = 0.001", "tick_size = 0.01").replace(
+        "stamp_tax = false", "stamp_tax = true"
+    )
+    text += '\n[value]\nfundamentals = "fundamentals.sqlite3"\nfrequency = "monthly"\ntop_n = 2\nmax_per_industry = 1\n'
+    config.write_text(text, encoding="utf-8")
+    facts = []
+    for year in range(2021, 2025):
+        for index, symbol in enumerate(mapping.values()):
+            facts.append(
+                Fundamental(
+                    symbol,
+                    dt.date(year, 12, 31),
+                    dt.date(year + 1, 4, 1),
+                    dt.date(year + 1, 4, 2),
+                    dt.date(2010, 1, 1),
+                    f"合成公司{index}",
+                    f"合成行业{index}",
+                    1 + 0.4 * math.sin(year + index),
+                    8 + index,
+                    0.12 + 0.02 * index,
+                    2,
+                    0.4,
+                    source="synthetic_demo",
+                )
+            )
+    ValueStore(directory / "fundamentals.sqlite3").append(facts)
     return config
