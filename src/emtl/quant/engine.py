@@ -28,6 +28,7 @@ class BacktestResult:
     halted: bool = False
     universe_history: list[dict] = field(default_factory=list)
     value_status: dict | None = None
+    holdings: list[tuple[dt.date, frozenset[str]]] = field(default_factory=list)
 
     def metrics(self) -> dict[str, float | int | None]:
         if not self.curve:
@@ -77,6 +78,7 @@ class Backtester:
         risk: RiskPolicy | None = None,
         rebalance: str = "monthly",
         universe: ValueUniverse | None = None,
+        fractional_action: str = "error",
     ) -> None:
         finite(initial_cash, "initial_cash", minimum=1)
         self.instruments = {i.symbol: i for i in instruments}
@@ -89,6 +91,9 @@ class Backtester:
         _period(dt.date(2020, 1, 1), rebalance)
         self.rebalance = rebalance
         self.universe = universe
+        if fractional_action not in {"error", "floor"}:
+            raise ValueError("fractional_action must be error or floor")
+        self.fractional_action = fractional_action
 
     def run(
         self, bars: Sequence[Bar], *, start: dt.date | None = None, end: dt.date | None = None
@@ -133,9 +138,19 @@ class Backtester:
                     if position and position.quantity:
                         quantity = position.quantity * bar.split_ratio
                         if not math.isclose(quantity, round(quantity), abs_tol=1e-6):
-                            raise ValueError(
-                                "fractional corporate-action shares require explicit handling"
+                            if self.fractional_action == "error":
+                                raise ValueError(
+                                    "fractional corporate-action shares require explicit handling"
+                                )
+                            result.events.append(
+                                {
+                                    "date": str(date),
+                                    "symbol": symbol,
+                                    "reason": "fractional_shares_discarded",
+                                    "shares": quantity - math.floor(quantity),
+                                }
                             )
+                            quantity = math.floor(quantity)
                         portfolio.cash = round(
                             portfolio.cash + position.quantity * bar.cash_dividend, 2
                         )
@@ -161,6 +176,9 @@ class Backtester:
             peak = max(peak, equity)
             drawdown = 1 - equity / peak
             result.curve.append(EquityPoint(date, equity, portfolio.cash, drawdown))
+            result.holdings.append(
+                (date, frozenset(s for s, p in portfolio.positions.items() if p.quantity))
+            )
             pending = None
             pool_changed = False
             if self.universe:

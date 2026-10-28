@@ -1,4 +1,4 @@
-# 16只主板候选股的研究示例，非全A扫描或投资推荐；可自行扩充至200只。
+# 16只主板候选股的研究示例，非全A扫描或投资推荐；全市场请使用 full_market.toml。
 data = "../../.quant/value-daily.csv"
 data_provider = "tencent" # 显式备用未复权日线源，不自动混合两家数据
 initial_cash = 1000000

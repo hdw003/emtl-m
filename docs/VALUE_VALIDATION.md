@@ -1,4 +1,6 @@
-# 0.5.0 价值层验证记录
+# 0.5.0 价值层验证记录（历史版本）
+
+0.6.0 已切换全市场无数量截断模式，当前结果见 [FULL_MARKET_VALIDATION.md](FULL_MARKET_VALIDATION.md)。
 
 日期：2026-10-28（Asia/Shanghai）；本地 Python 3.12.14。
 

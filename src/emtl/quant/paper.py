@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from .config import QuantConfig
 from .data import load_csv
 from .engine import BacktestResult
+from .market import MarketStore, canonical
 from .value import ValueStore
 
 
@@ -53,11 +54,37 @@ def run_paper(
     digest = hashlib.sha256()
     by_date: dict[dt.date, str] = {}
     fact_index = 0
+    catalogs = MarketStore(config.market.store).catalogs() if config.market else []
+    catalog_index = 0
+    availability = MarketStore(config.market.store).history_availability() if config.market else {}
+    bootstraps = {}
+    if config.market:
+        for item in bars:
+            observed = availability.get(item.symbol)
+            if observed is not None and item.date < observed:
+                bootstraps.setdefault(observed, []).append(item)
+    bootstrapped = set()
     for bar in bars:
+        while catalog_index < len(catalogs) and catalogs[catalog_index]["known_on"] <= str(
+            bar.date
+        ):
+            digest.update(canonical(catalogs[catalog_index]).encode())
+            catalog_index += 1
         while fact_index < len(facts) and facts[fact_index].known_on <= bar.date:
             digest.update(facts[fact_index].json().encode())
             fact_index += 1
-        digest.update(json.dumps(asdict(bar), sort_keys=True, default=str).encode())
+        if config.market:
+            for observed in sorted(bootstraps):
+                if observed <= bar.date and observed not in bootstrapped:
+                    for historical in bootstraps[observed]:
+                        digest.update(
+                            json.dumps(asdict(historical), sort_keys=True, default=str).encode()
+                        )
+                    bootstrapped.add(observed)
+            if availability.get(bar.symbol, dt.date.max) <= bar.date:
+                digest.update(json.dumps(asdict(bar), sort_keys=True, default=str).encode())
+        else:
+            digest.update(json.dumps(asdict(bar), sort_keys=True, default=str).encode())
         by_date[bar.date] = digest.hexdigest()
     database.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database, timeout=30) as connection:

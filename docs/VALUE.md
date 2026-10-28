@@ -1,13 +1,14 @@
-# 价值选股 + 中长线策略（0.5.0）
+# 价值选股 + 中长线策略（0.6.0）
 
 工作流分成四层：**候选范围 → 按时点筛选价值股池 → 长线策略择时/配置 → 风控与模拟执行**。
-默认示例包含16只主板候选股票，支持配置1—200只；它不是全A实时扫描，也不是推荐名单。
-候选范围是实验配置的一部分，修改范围或因子参数需要新建模拟账本。
+默认运行脚本使用沪深北全市场配置，不设置候选、入池数量和行业数量上限；原16只主板示例保留用于小规模研究。
+完整使用方式见 [FULL_MARKET.md](FULL_MARKET.md)。
+固定候选示例修改范围或因子参数需要新建模拟账本；全市场模式的新增名单与历史数据按观察日生效。
 价值股池的成员则会按月或季度自动变化，不需要修改候选配置。
 
 ## 默认筛选与评分
 
-示例配置：[value_trend.toml](../examples/quant/value_trend.toml)。
+默认配置：[full_market.toml](../examples/quant/full_market.toml)；16股旧示例：[value_trend.toml](../examples/quant/value_trend.toml)。
 
 | 条件 | 默认值 |
 | --- | --- |
@@ -20,8 +21,8 @@
 | 年报新鲜度 | 报告期末距决策日不超过550天 |
 | 流动性 | 最近20个输入交易日的 close × 股数均值 >= 2000万元 |
 | 状态 | 排除已知 ST / 退市状态；不对无行情、停牌日新开仓 |
-| 行业 | 默认排除银行/保险/证券；每行业最多3只 |
-| 股池大小 | 最多8只，不足时保留空余仓位 |
+| 行业 | 默认排除银行/保险/证券；全市场配置不限制行业数量 |
+| 股池大小 | 全市场配置为 `top_n="all"`，所有通过条件的股票入池 |
 
 这是**年报口径的 PE/PB/ROE**，不是滚动 TTM，也不会把半年 EPS 当成年 EPS。
 金融行业资产负债表和现金流的含义不同，默认不套用同一质量模型。
@@ -86,7 +87,7 @@ uv sync --locked --extra tests
 .venv/bin/emt quant paper --config .quant/value-demo/strategy.toml --asof 2025-12-31 --database .quant/value-demo/paper.sqlite3 --output .quant/value-demo/paper.json
 ```
 
-公开数据的首次准备与预览：
+固定16股示例的首次准备与预览（全市场请使用 `market-scan`，见全市场指南）：
 
 ```sh
 .venv/bin/emt quant value-capture --config examples/quant/value_trend.toml
@@ -129,13 +130,13 @@ bash scripts/run_value_daily.sh
 
 脚本用进程锁包住整个流水线，依次：每日财务采集 → 追加候选股日线 → 模拟盘重放 → 保存股池及报告。
 财务每日采集用于归档新版本和状态，价值股池仍按配置的月/季频率重排，价格策略按自己的周/月频率运行。
-文件分别为 `.quant/value-fundamentals.sqlite3`、`value-daily.csv`、`value-paper.sqlite3` 和 `value-paper.json`。
+全市场文件以 `.quant/full-market-` 开头，另有 `.quant/full-market.sqlite3` 保存名单、原始请求和断点。
 
 cron 示例（机器需支持 CRON_TZ，代理/CA环境变量也必须传给任务）：
 
 ```cron
 CRON_TZ=Asia/Shanghai
-30 16 * * 1-5 cd /workspace/emtl-m && bash scripts/run_value_daily.sh >> .quant/value-daily.log 2>&1
+30 16 * * 1-5 cd /workspace/emtl-m && bash scripts/run_value_daily.sh >> .quant/full-market-daily.log 2>&1
 ```
 
 首次先 `mkdir -p .quant`。本项目不自动修改系统cron；云任务结束不保证仍在线，

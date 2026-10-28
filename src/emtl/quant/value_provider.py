@@ -16,12 +16,8 @@ class EastmoneyValueProvider:
 
     def capture(self, instruments: tuple[Instrument, ...]) -> tuple[list[Fundamental], dict]:
         observed = dt.datetime.now(ZoneInfo("Asia/Shanghai"))
-        if not instruments or len(instruments) > 200:
-            raise ValueError("configure 1..200 candidate stocks per value job")
-        for instrument in instruments:
-            code = instrument.symbol[:6]
-            if not code.startswith(("000", "001", "002", "003", "600", "601", "603", "605")):
-                raise ValueError("default value provider supports SH/SZ main-board stocks only")
+        if not instruments:
+            raise ValueError("candidate stocks must be nonempty")
         result, evidence = (
             [],
             {"observed_at": observed.isoformat(), "profiles": {}, "annual_reports": {}},

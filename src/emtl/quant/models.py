@@ -28,7 +28,7 @@ class Instrument:
             len(parts) != 2
             or len(parts[0]) != 6
             or not parts[0].isdigit()
-            or parts[1] not in {"SH", "SZ"}
+            or parts[1] not in {"SH", "SZ", "BJ"}
         ):
             raise ValueError("symbol must have an explicit market, e.g. 510300.SH")
         if (

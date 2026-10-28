@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
+from .activity import activity
 from .config import QuantConfig
 from .engine import BacktestResult
 
@@ -18,6 +19,9 @@ def report(result: BacktestResult, config: QuantConfig) -> dict:
         "config_hash": config.fingerprint(),
         "strategy": asdict(config.strategy),
         "metrics": result.metrics(),
+        "activity": activity(
+            result, config.rebalance, config.value.frequency if config.value else None
+        ),
         "halted": result.halted,
         "next_weights": result.next_weights,
         "positions": {s: asdict(p) for s, p in result.portfolio.positions.items() if p.quantity},
@@ -40,7 +44,10 @@ def report(result: BacktestResult, config: QuantConfig) -> dict:
             "unfilled": "unfilled target is discarded; reconsider at next scheduled signal or risk exit",
             "costs": asdict(config.costs),
             "risk": asdict(config.risk),
-            "universe": "user-supplied; survivorship bias must be assessed separately",
+            "universe": "dated SH/SZ/BJ discovery and first-observed history availability; incomplete vendor coverage remains possible"
+            if config.market
+            else "user-supplied; survivorship bias must be assessed separately",
+            "fractional_action": config.market.fractional_action if config.market else "error",
             "benchmark": "none; absolute return metrics, zero-rate Sharpe",
         },
     }

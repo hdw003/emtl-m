@@ -40,6 +40,8 @@ class EMTBroker:
             raise RuntimeError(
                 "live execution is disabled; enable explicitly after account reconciliation"
             )
+        if intent.symbol.endswith(".BJ"):
+            raise ValueError("BJ live routing is not supported by EMTClient; research/paper only")
         if not request_id or len(request_id) > 128:
             raise ValueError("a stable request_id of 1..128 characters is required")
         if intent.quantity * intent.limit_price > self.max_order_value:

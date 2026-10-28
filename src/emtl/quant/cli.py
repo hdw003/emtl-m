@@ -13,9 +13,11 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from .comparison import compare
 from .config import QuantConfig, load_config
 from .data import EastmoneyDailyProvider, TencentDailyProvider, load_csv, write_csv
 from .demo import create_demo, create_value_demo
+from .market_scan import scan_market
 from .paper import latest_completed_date, run_paper
 from .report import report, write_json
 from .strategies import STRATEGIES, StrategySpec
@@ -33,6 +35,19 @@ def add_quant_parser(subparsers: argparse._SubParsersAction) -> None:
     demo.add_argument("--directory", type=Path, required=True)
     value_demo = commands.add_parser("value-demo", help="生成价值股池与长线策略结合的离线合成示例")
     value_demo.add_argument("--directory", type=Path, required=True)
+    comparison = commands.add_parser(
+        "compare", help="七策略、三种调仓频率对比（明确标注当前股池回看偏差）"
+    )
+    comparison.add_argument("--config", type=Path, required=True)
+    comparison.add_argument("--start", type=dt.date.fromisoformat, required=True)
+    comparison.add_argument("--end", type=dt.date.fromisoformat, required=True)
+    comparison.add_argument("--directory", type=Path, required=True)
+    market = commands.add_parser(
+        "market-scan", help="沪深北全市场分页扫描、财务筛选及历史日线断点续传"
+    )
+    market.add_argument("--config", type=Path, required=True)
+    market.add_argument("--asof", type=dt.date.fromisoformat)
+    market.add_argument("--output", type=Path, required=True)
     for command in ("value-capture", "value-import", "value-pool"):
         value_parser = commands.add_parser(command, help="价值年报采集、时点数据导入或股池预览")
         value_parser.add_argument("--config", type=Path, required=True)
@@ -63,6 +78,10 @@ def add_quant_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _fetch(config: QuantConfig, start: dt.date, end: dt.date, *, append: bool) -> dict:
+    if config.market:
+        raise ValueError(
+            "full-market mode uses market-scan or daily to discover and update all candidates"
+        )
     if start > end:
         raise ValueError("start must be <= end")
     if end > latest_completed_date():
@@ -104,11 +123,65 @@ def run_quant(args: argparse.Namespace) -> int:
             print(create_value_demo(args.directory))
             return 0
         config = load_config(args.config)
+
+        def progress(message):
+            if message.get("status") == "complete" or message.get("stage") == "history":
+                print(json.dumps(message, ensure_ascii=False), file=sys.stderr, flush=True)
+
+        if args.quant_command == "compare":
+            payload = compare(
+                config,
+                args.directory,
+                args.start,
+                args.end,
+                progress=lambda message: print(
+                    json.dumps(message, ensure_ascii=False), file=sys.stderr, flush=True
+                ),
+            )
+            print(
+                json.dumps(
+                    {
+                        "directory": str(args.directory),
+                        "pool_count": payload["current_pool_count"],
+                        "warning": payload["warning"],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+        if args.quant_command == "market-scan":
+            payload = scan_market(config, asof=args.asof, progress=progress)
+            write_json(args.output, payload)
+            print(
+                json.dumps(
+                    {
+                        key: payload[key]
+                        for key in (
+                            "status",
+                            "registry_count",
+                            "priced_count",
+                            "financial_count",
+                            "prequalified_count",
+                            "selected_count",
+                            "data_rows",
+                            "status_counts",
+                        )
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
         if args.quant_command.startswith("value-"):
             if config.value is None:
                 raise ValueError("configure [value] before using value commands")
             if args.quant_command == "value-capture":
-                payload = capture_value(config, force=args.force)
+                payload = (
+                    scan_market(config, progress=progress)
+                    if config.market
+                    else capture_value(config, force=args.force)
+                )
             elif args.quant_command == "value-import":
                 payload = {"inserted": ValueStore(config.value.fundamentals).import_csv(args.input)}
             else:
@@ -122,9 +195,13 @@ def run_quant(args: argparse.Namespace) -> int:
             print(json.dumps(_fetch(config, args.start, args.end, append=args.append)))
             return 0
         if args.quant_command == "daily":
-            if config.value is not None:
-                capture_value(config)
-            _fetch(config, args.start, args.asof or latest_completed_date(), append=True)
+            if config.market:
+                scan_market(config, asof=args.asof, progress=progress)
+                config = load_config(args.config)
+            else:
+                if config.value is not None:
+                    capture_value(config)
+                _fetch(config, args.start, args.asof or latest_completed_date(), append=True)
         if args.quant_command in {"paper", "daily"}:
             result, new_sessions = run_paper(config, args.database, asof=args.asof)
         else:

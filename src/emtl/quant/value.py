@@ -8,8 +8,9 @@ import hashlib
 import json
 import math
 import sqlite3
+from bisect import bisect_left, bisect_right
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
@@ -55,8 +56,10 @@ class Fundamental:
             value = getattr(self, key)
             if value is not None and not math.isfinite(value):
                 raise ValueError(f"{key} must be finite or missing")
-        if self.debt_ratio is not None and not 0 <= self.debt_ratio <= 1:
-            raise ValueError("debt_ratio must be a fraction in [0, 1]")
+        if self.debt_ratio is not None and self.debt_ratio < 0:
+            raise ValueError(
+                "debt_ratio must be a nonnegative fraction (insolvent issuers may exceed 1)"
+            )
         if type(self.is_st) is not bool or type(self.is_active) is not bool:
             raise ValueError("is_st/is_active must be booleans")
 
@@ -180,7 +183,7 @@ class ValueStore:
 class ValueSpec:
     fundamentals: Path
     frequency: str = "monthly"
-    top_n: int = 10
+    top_n: int | None = None
     max_pe: float = 25
     max_pb: float = 3
     min_roe: float = 0.08
@@ -190,7 +193,7 @@ class ValueSpec:
     max_financial_age_days: int = 550
     liquidity_window: int = 20
     min_daily_amount: float = 20_000_000
-    max_per_industry: int = 3
+    max_per_industry: int | None = None
     earnings_weight: float = 0.4
     book_weight: float = 0.3
     quality_weight: float = 0.3
@@ -206,6 +209,8 @@ class ValueSpec:
             "liquidity_window",
             "max_per_industry",
         ):
+            if key in {"top_n", "max_per_industry"} and getattr(self, key) is None:
+                continue
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError(f"{key} must be a positive integer")
         for key in (
@@ -246,6 +251,8 @@ def screen_value(
     prices: dict[str, float],
     amounts: dict[str, list[float]],
     tradable: set[str],
+    *,
+    check_liquidity: bool = True,
 ) -> dict:
     known = latest_facts(facts, date)
     ranked = []
@@ -284,7 +291,7 @@ def screen_value(
             reason = "quality_filter"
         elif symbol not in tradable:
             reason = "not_tradable"
-        elif (
+        elif check_liquidity and (
             len(amounts.get(symbol, [])) < spec.liquidity_window
             or sum(amounts[symbol][-spec.liquidity_window :]) / spec.liquidity_window
             < spec.min_daily_amount
@@ -322,17 +329,19 @@ def screen_value(
         ("pb_annual", spec.book_weight, True),
         ("roe", spec.quality_weight, False),
     ):
+        ordered = sorted(row[key] for row in ranked)
         for row in ranked:
-            worse = sum(
-                (other[key] > row[key]) if smaller else (other[key] < row[key]) for other in ranked
-            )
-            ties = sum(other[key] == row[key] for other in ranked)
+            left, right = bisect_left(ordered, row[key]), bisect_right(ordered, row[key])
+            worse = n - right if smaller else left
+            ties = right - left
             row["score"] += weight * (worse + (ties - 1) / 2) / max(1, n - 1)
     ranked.sort(key=lambda row: (-row["score"], row["symbol"]))
     counts: Counter = Counter()
     selected = []
     for row in ranked:
-        if len(selected) < spec.top_n and counts[row["industry"]] < spec.max_per_industry:
+        if (spec.top_n is None or len(selected) < spec.top_n) and (
+            spec.max_per_industry is None or counts[row["industry"]] < spec.max_per_industry
+        ):
             selected.append(row["symbol"])
             counts[row["industry"]] += 1
     digest = hashlib.sha256(
@@ -350,8 +359,14 @@ def screen_value(
 
 
 class ValueUniverse:
-    def __init__(self, spec: ValueSpec, facts: list[Fundamental]) -> None:
+    def __init__(
+        self,
+        spec: ValueSpec,
+        facts: list[Fundamental],
+        membership: Callable[[dt.date], set[str]] | None = None,
+    ) -> None:
         self.spec, self.facts = spec, facts
+        self.membership = membership
         self.reset()
 
     def reset(self) -> None:
@@ -372,6 +387,7 @@ class ValueUniverse:
             date.month if self.spec.frequency == "monthly" else (date.month - 1) // 3,
         )
         previous = self.members.copy()
+        allowed = self.membership(date) if self.membership else set(prices)
         known = latest_facts(self.facts, date)
         first_known = bool(set(known) & set(prices)) and not self.seen_financials
         self.seen_financials = self.seen_financials or first_known
@@ -379,12 +395,20 @@ class ValueUniverse:
             s
             for s in self.members
             if s not in known
+            or s not in allowed
             or known[s].is_st
             or not known[s].is_active
             or (date - known[s].period_end).days > self.spec.max_financial_age_days
         }
         if period != self.period or first_known:
-            snapshot = screen_value(self.spec, self.facts, date, prices, amounts, tradable)
+            snapshot = screen_value(
+                self.spec,
+                self.facts,
+                date,
+                {s: p for s, p in prices.items() if s in allowed},
+                amounts,
+                tradable & allowed,
+            )
             self.members = set(snapshot["selected"])
             self.snapshots.append(snapshot)
             self.period = period
