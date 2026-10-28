@@ -57,7 +57,7 @@ BASE_HEADERS: dict[str, str] = {
         "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     ),
     "Origin": "https://jywg.18.cn",
-    "Host": "jywg.18.cn",
+    # Host 由 HTTP 客户端按 URL 生成，避免行情请求被路由到交易站。
 }
 
 # 登录 POST 专属头。

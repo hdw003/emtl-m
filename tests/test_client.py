@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import requests
 
 from emtl._client import EMTClient
 from emtl._models import Direction, QuoteMarket, TradeMarket
@@ -60,6 +61,25 @@ def test_transport_respects_environment_proxy_and_ca(monkeypatch: pytest.MonkeyP
     )
     assert settings["proxies"]["https"] == "http://cloud-proxy.example:8080"
     assert settings["verify"] == "/tmp/cloud-ca.pem"
+
+
+def test_quote_request_does_not_use_trading_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = EMTClient()
+    sent: list[requests.PreparedRequest] = []
+
+    def send(request: requests.PreparedRequest, **kwargs: Any) -> Any:
+        sent.append(request)
+        return fake_response(json_data={"status": 0, "realtimequote": {"currentPrice": "9.80"}})
+
+    monkeypatch.setattr(client._session, "send", send)
+    assert client.last_price("600000", QuoteMarket.SH) == 9.80
+    assert sent[0].url == (
+        "https://emhsmarketwg.eastmoneysec.com/api/SHSZQuoteSnapshot?id=600000&market=SH"
+    )
+    assert sent[0].headers.get("Host") in (None, "emhsmarketwg.eastmoneysec.com")
+
+    client._get("https://jywg.18.cn/Login")
+    assert sent[1].headers.get("Host") in (None, "jywg.18.cn")
 
 
 class FlakyCaptcha:
