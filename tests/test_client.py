@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -17,7 +18,9 @@ HTML_WITH_KEY = (
 )
 
 
-def fake_response(*, text: str = "", content: bytes = b"", json_data: Any = None) -> SimpleNamespace:
+def fake_response(
+    *, text: str = "", content: bytes = b"", json_data: Any = None
+) -> SimpleNamespace:
     def _json() -> Any:
         if json_data is None:
             raise ValueError(text)
@@ -38,7 +41,9 @@ class FakeClient(EMTClient):
             return fake_response(text=HTML_WITH_KEY)
         return fake_response(content=b"\x89PNG-fake-captcha")
 
-    def _post(self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
+    def _post(
+        self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> Any:
         self.posts.append((url, dict(data)))
         if "Authentication" in url:
             return fake_response(json_data={"Status": 0, "Data": "logged-in"})
@@ -49,10 +54,13 @@ def _client() -> FakeClient:
     return FakeClient(username="demo_user", password="demo_pass", solver=None)
 
 
-def test_transport_respects_environment_proxy_and_ca(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_transport_respects_environment_proxy_and_ca(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ca_path = str(tmp_path / "cloud-ca.pem")
     monkeypatch.setenv("HTTPS_PROXY", "http://cloud-proxy.example:8080")
     monkeypatch.setenv("https_proxy", "http://cloud-proxy.example:8080")
-    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/tmp/cloud-ca.pem")
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", ca_path)
     monkeypatch.setenv("NO_PROXY", "")
     monkeypatch.setenv("no_proxy", "")
     client = EMTClient()
@@ -60,7 +68,7 @@ def test_transport_respects_environment_proxy_and_ca(monkeypatch: pytest.MonkeyP
         "https://jywg.18.cn/Trade/Buy", {}, False, True, None
     )
     assert settings["proxies"]["https"] == "http://cloud-proxy.example:8080"
-    assert settings["verify"] == "/tmp/cloud-ca.pem"
+    assert settings["verify"] == ca_path
 
 
 def test_quote_request_does_not_use_trading_host(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,7 +116,9 @@ def test_login_requires_credentials() -> None:
 
 def test_login_raises_on_nonzero_status() -> None:
     class Bad(FakeClient):
-        def _post(self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
+        def _post(
+            self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None
+        ) -> Any:
             if "Authentication" in url:
                 return fake_response(json_data={"Status": -1, "Data": "bad password"})
             return super()._post(url, data=data, headers=headers)
@@ -123,7 +133,9 @@ def test_login_retries_when_solver_captcha_rejected() -> None:
             super().__init__(**kw)
             self.n = 0
 
-        def _post(self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
+        def _post(
+            self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None
+        ) -> Any:
             if "Authentication" in url:
                 self.n += 1
                 if self.n < 3:
@@ -161,7 +173,9 @@ def test_create_order_form_maps_direction_and_market() -> None:
 
 def _rejecting_client(message: str = "非交易时间") -> FakeClient:
     class Reject(FakeClient):
-        def _post(self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
+        def _post(
+            self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None
+        ) -> Any:
             if "SubmitTradeV2" in url:
                 return fake_response(json_data={"Status": -1, "Message": message})
             return super()._post(url, data=data, headers=headers)
@@ -191,13 +205,19 @@ def test_export_chain_builds_url() -> None:
     original_post = FakeClient._post
 
     class ExportClient(FakeClient):
-        def _post(self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
+        def _post(
+            self, url: str, *, data: dict[str, Any], headers: dict[str, str] | None = None
+        ) -> Any:
             if "GetEmTradeFileUrl" in url:
                 chain_calls.append(("url", dict(data)))
-                return fake_response(json_data={"Status": 0, "Data": "https://dl.example/export.zip"})
+                return fake_response(
+                    json_data={"Status": 0, "Data": "https://dl.example/export.zip"}
+                )
             if "queryDataExport" in url:
                 chain_calls.append(("query", dict(data)))
-                return fake_response(json_data={"Status": 0, "Data": [{"fileUrl": "inner_20260907.dat"}]})
+                return fake_response(
+                    json_data={"Status": 0, "Data": [{"fileUrl": "inner_20260907.dat"}]}
+                )
             if "applyDataExport" in url:
                 chain_calls.append(("apply", dict(data)))
                 return fake_response(json_data={"Status": 0, "Data": [{"applyCode": "APC001"}]})

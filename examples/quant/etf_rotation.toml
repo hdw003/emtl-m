@@ -1,0 +1,51 @@
+# 示例资产池和参数，用于研究与模拟，不是投资推荐。
+# 路径相对本配置文件。首次运行先 fetch，或使用 scripts/run_quant_daily.sh。
+data = "../../.quant/etf-daily.csv"
+initial_cash = 1000000
+rebalance = "monthly"
+start = "2021-01-01"
+
+[strategy]
+name = "momentum_rotation"
+lookback = 126
+skip = 21
+top_n = 2
+absolute_filter = true
+
+[risk]
+max_position = 0.45
+max_gross = 0.90
+target_volatility = 0.12
+volatility_window = 60
+max_drawdown = 0.20
+stop_loss = 0.12
+trailing_stop = 0.15
+cooldown = 20
+
+[costs]
+commission = 0.0003
+minimum_commission = 5.0
+sell_tax = 0.0005
+slippage_bps = 5.0
+participation = 0.10
+
+[[instruments]]
+symbol = "510300.SH"
+tick_size = 0.001
+stamp_tax = false
+
+[[instruments]]
+symbol = "510500.SH"
+tick_size = 0.001
+stamp_tax = false
+
+[[instruments]]
+symbol = "518880.SH"
+tick_size = 0.001
+stamp_tax = false
+
+[[instruments]]
+symbol = "511010.SH"
+tick_size = 0.001
+settlement_days = 0
+stamp_tax = false

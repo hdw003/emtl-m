@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import datetime as dt
 
-from emtl._models import ApiResponse, Direction, TradeMarket, date_range
+import pytest
+
+from emtl._models import (
+    ApiResponse,
+    Direction,
+    QuoteMarket,
+    TradeMarket,
+    date_range,
+    guess_market,
+    guess_quote_market,
+)
 
 
 def test_direction_enum_values() -> None:
@@ -16,6 +26,22 @@ def test_direction_enum_values() -> None:
 def test_market_enum_values() -> None:
     assert TradeMarket.SH.value == "HA"
     assert TradeMarket.SZ.value == "SA"
+
+
+@pytest.mark.parametrize(
+    ("code", "market"),
+    [
+        ("510300", "SH"),
+        ("518880", "SH"),
+        ("600000", "SH"),
+        ("900901", "SH"),
+        ("159915", "SZ"),
+        ("000001", "SZ"),
+    ],
+)
+def test_stock_and_etf_market_inference(code: str, market: str) -> None:
+    assert guess_market(code) == TradeMarket[market]
+    assert guess_quote_market(code) == QuoteMarket[market]
 
 
 def test_api_response_ok() -> None:

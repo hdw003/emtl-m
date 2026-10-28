@@ -29,6 +29,7 @@ from ._models import (
     guess_quote_market,
 )
 from .errors import EMTError
+from .quant.cli import add_quant_parser, run_quant
 
 
 def _print(payload: ApiResponse | str) -> None:
@@ -49,6 +50,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-p", "--password", help="密码；缺省取环境变量 EM_PASSWORD")
     p.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
+    add_quant_parser(sub)
 
     q = sub.add_parser("query", help="查询账户数据")
     q.add_argument("kind", choices=["asset", "orders", "trades", "funds"])
@@ -83,6 +85,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    if args.command == "quant":
+        return run_quant(args)
     try:
         client = EMTClient(username=args.user, password=args.password)
 

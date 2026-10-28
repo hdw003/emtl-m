@@ -6,3 +6,6 @@ dist/
 build/
 .ruff_cache/
 .pytest_cache/
+.quant/
+.coverage
+htmlcov/

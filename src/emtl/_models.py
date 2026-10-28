@@ -98,13 +98,13 @@ def date_range(days: int = 30, *, end: dt.date | None = None) -> tuple[str, str]
 
 
 def guess_market(code: str) -> TradeMarket:
-    """纯决策：6 开头按沪市(HA)，否则默认深市(SA)。可被显式 --market 覆盖。"""
-    return TradeMarket.SH if code.strip().startswith("6") else TradeMarket.SZ
+    """沪市股票/基金/B 股使用 6/5/9 前缀；可被显式 --market 覆盖。"""
+    return TradeMarket.SH if code.strip().startswith(("5", "6", "9")) else TradeMarket.SZ
 
 
 def guess_quote_market(code: str) -> QuoteMarket:
-    """纯决策：6 开头为沪(SH)，否则为深(SZ)。"""
-    return QuoteMarket.SH if code.strip().startswith("6") else QuoteMarket.SZ
+    """行情市场推断包含沪市 5 开头 ETF，与交易市场保持一致。"""
+    return QuoteMarket.SH if code.strip().startswith(("5", "6", "9")) else QuoteMarket.SZ
 
 
 OrderSide = Literal["B", "S"]

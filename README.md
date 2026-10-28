@@ -18,6 +18,20 @@
 | `logging.basicConfig(force=True)` 污染调用方 | 库不配置根日志 |
 | py3.10 混搭、缺类型 | `>=3.12`，`StrEnum` / PEP 695 / `match` / frozen+slots dataclass |
 
+## 日线量化（0.4.0）
+
+新增 A 股与 ETF 的七类中长线策略：双均线、时间序列动量、动量轮动、通道突破、
+布林均值回归、逆波动率配置及等权持有。支持含成本/滑点的下一开盘回测、仓位和回撤风控、
+SQLite 可恢复模拟盘、公开日线下载及每日运行脚本。实盘适配器默认关闭。
+
+```sh
+emt quant demo --directory .quant/demo
+emt quant backtest --config .quant/demo/strategy.toml --output .quant/demo/report.json
+```
+
+合成数据仅用于功能验证。配置、真实数据、公司行动、长期调度及手动实盘边界见
+[量化运行指南](docs/QUANT.md)。
+
 ## 安装
 
 ```sh

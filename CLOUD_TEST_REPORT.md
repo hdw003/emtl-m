@@ -1,5 +1,8 @@
 # 云端测试结果
 
+本文记录 0.3.0 客户端初始验证；0.4.0 量化功能及最新测试结果见
+[量化验证记录](docs/QUANT_VALIDATION.md)。
+
 - 日期：2026-10-28（Asia/Shanghai）
 - 用户仓库：`hdw003/emtl-m`
 - 上游：`aresbit/emtl-m`
