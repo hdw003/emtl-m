@@ -5,6 +5,8 @@
 协议逆向自 [riiy/emtl](https://github.com/riiy/emtl)（MIT）。本仓库在**保持网络协议细节不变**的前提下，
 按现代工程规范重写：类型注解、无模块级全局可变状态、依赖注入、异常分层、可选验证码求解器、可用 CLI。
 
+开发历程、当前架构、运行方式、验证范围和后续维护事项见[项目开发摘要](docs/DEVELOPMENT_SUMMARY.md)。
+
 ## 特性差异 vs 原版 riiy/emtl
 
 | 原版问题 | emtl-m 处理 |
