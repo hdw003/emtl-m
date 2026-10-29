@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from .config import QuantConfig
@@ -60,6 +60,26 @@ def compare(
             raise ValueError("strategy comparison must use the same final value pool")
         pool = current
         frozen = [b for b in bars if b.symbol in current]
+        ranking_snapshot = next(
+            (snapshot for snapshot in reversed(strict.universe_history) if "ranking" in snapshot),
+            None,
+        )
+        frozen_ranking = (
+            {row["symbol"]: row["score"] for row in ranking_snapshot["ranking"]}
+            if ranking_snapshot
+            else {}
+        )
+        if name == STRATEGIES[0]:
+            write_json(
+                directory / "frozen-current-ranking.json",
+                {
+                    "ranking_observed_date": ranking_snapshot["date"] if ranking_snapshot else None,
+                    "warning": "Frozen future-known value scores for a hindsight-biased diagnostic only.",
+                    "scores": frozen_ranking,
+                },
+            )
+        if not current:
+            raise ValueError("no current value candidates available for a frozen-pool comparison")
         for frequency in ("monthly", "weekly", "daily"):
             historical = replace(
                 config,
@@ -71,13 +91,15 @@ def compare(
                 start=start,
                 end=end,
             )
-            engine = historical.engine()
+            engine = historical.engine(
+                selection_ranking=frozen_ranking if config.portfolio else None
+            )
             engine.fractional_action = config.market.fractional_action if config.market else "error"
             result = engine.run(frozen, start=start, end=end)
             diagnostic = report(result, historical)
             diagnostic["study_kind"] = "biased_current_pool_historical_reference"
             diagnostic["warning"] = (
-                "Current selected identities are fixed retrospectively. Financial and membership look-ahead and survivorship bias are present. This does not validate historical dynamic value returns."
+                "Current selected identities and value scores are fixed retrospectively. Financial and membership look-ahead and survivorship bias are present. This does not validate historical dynamic value returns."
             )
             diagnostic["assumptions"]["fractional_action"] = engine.fractional_action
             write_json(directory / f"biased-static-{frequency}-{name}.json", diagnostic)
@@ -121,8 +143,9 @@ def compare(
         "first_financial_observation": str(first),
         "current_pool_count": len(pool),
         "point_in_time": actual,
+        "portfolio_policy": asdict(config.portfolio) if config.portfolio else None,
         "biased_static_reference": reference,
-        "warning": "Historical static reference uses the current pool: look-ahead and survivorship bias. Forward observation history is required to evaluate dynamic value selection.",
+        "warning": "Historical static reference uses the current pool and current value scores: look-ahead and survivorship bias. Forward observation history is required to evaluate dynamic value selection.",
     }
     write_json(directory / "comparison.json", payload)
 
@@ -132,9 +155,12 @@ def compare(
     lines = [
         f"# 全市场股池策略诊断：{start} 至 {end}",
         "",
-        f"当前股池 {len(pool)} 只；财务首次留档 {first}。",
+        f"当前候选股池 {len(pool)} 只；财务首次留档 {first}。",
+        f"实际组合预算：最多{config.portfolio.max_positions}只；候选股池无限制。"
+        if config.portfolio
+        else "未配置独立持仓选择层。",
         "",
-        "**以下历史收益使用当前股池回看，存在未来成员和幸存者偏差，不能代表历史动态价值选股的真实收益。**",
+        "**以下历史收益使用当前股池与当前价值评分回看，存在未来成员、未来因子和幸存者偏差，不能代表历史动态价值选股的真实收益。**",
         "",
         "包含佣金、最低佣金、卖出印花税、滑点及公开分红送转；不含个人分红税，现金于除息日入账。风险退出可发生在周/月调仓之外。",
         "",

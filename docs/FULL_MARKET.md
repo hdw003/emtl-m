@@ -1,4 +1,6 @@
-# 沪深北全市场价值选股（0.6.0）
+# 沪深北全市场价值选股（0.7.0）
+
+新增[月度价值择优与持仓轮换](VALUE_ROTATION.md)：股池作为候选库，默认最多持有10只，不把全池全部买入。
 
 默认入口为 [full_market.toml](../examples/quant/full_market.toml) 和 `scripts/run_value_daily.sh`。
 不再手写股票清单，不设200只候选上限；价值配置 `top_n="all"`、`max_per_industry="all"`，所有通过条件的股票入池。
@@ -42,8 +44,8 @@ bash scripts/run_value_daily.sh
 全市场模式无需修改固定 `[[instruments]]`；参数发生语义变化仍需新建模拟账本。
 首次有可用财务数据可月中初始化，ST/非活跃/财报过期/移出目录会提前剔除。
 
-价格策略默认周调仓，股池变化与风险退出可以额外触发交易，因此实际成交频率可能更高。
-`strategy.top_n` 是动量轮动策略的持仓集中度参数，与全市场扫描或价值股池上限无关；默认双均线策略不按数量截断趋势合格者。
+价格策略及持仓选择默认月调仓，股池变化与风险退出可以额外触发交易，因此实际成交频率可能更高。
+`strategy.top_n` 是动量轮动策略的持仓集中度参数，与全市场扫描或价值股池上限无关；默认双均线提供趋势合格者，独立 `[portfolio]` 按价值排名择优构建最多10只实际持仓，候选股池不截断。
 资金、整手、单股15%与总仓90%风险预算仍约束真实可买入数量。100万元等权分散到几百只股票时，最低佣金和整手偏差可能很显著。
 
 `daily` 对全市场配置执行全扫描、重新加载新目录、再运行模拟盘；不调用实盘接口。
@@ -59,7 +61,7 @@ CRON_TZ=Asia/Shanghai
 非交易日没有新行情时会失败退出，不虚构当日K线。监控退出码、`incomplete`、数据新鲜度、空池和 `halted`。
 
 状态保存在 `.quant/full-market.sqlite3`（原始响应/目录/历史可用日/断点）、`full-market-fundamentals.sqlite3`、
-`full-market-daily.csv`、`full-market-paper.sqlite3` 与JSON报告。用SQLite在线备份接口备份数据库，CSV与配置同时保存。
+`full-market-daily.csv`、`full-market-rotation-paper.sqlite3` 与JSON报告。用SQLite在线备份接口备份数据库，CSV与配置同时保存。
 原始请求按日期留档，磁盘会持续增长，应归档、监控容量；未提供自动删除历史证据的清理任务。
 升级先运行测试、在副本上验证重放；若历史修订被拒绝，保留旧账本并明确新建实验，不能删除检查绕过。
 

@@ -7,6 +7,7 @@ import math
 from dataclasses import dataclass
 
 from .models import Costs, Instrument, OrderIntent, finite
+from .portfolio import PortfolioSpec, target_quantity
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +29,7 @@ def plan_rebalance(
     max_age_seconds: int = 60,
     cash_reserve: float = 100,
     costs: Costs | None = None,
+    policy: PortfolioSpec | None = None,
 ) -> list[OrderIntent]:
     """No network. Values must come from fresh, externally reconciled account data.
 
@@ -67,29 +69,46 @@ def plan_rebalance(
     budget = max(0, account.cash - cash_reserve)
     costs = costs or Costs()
     orders: list[OrderIntent] = []
+    occupied = {s for s, q in account.quantities.items() if q > 0}
     for side in ("sell", "buy"):
         for symbol in sorted(symbols):
             instrument, price = universe[symbol], prices[symbol]
-            target = (
-                int(equity * weights.get(symbol, 0) / price / instrument.lot_size)
-                * instrument.lot_size
-            )
             quantity = account.quantities.get(symbol, 0)
+            target = target_quantity(
+                equity=equity,
+                weight=weights.get(symbol, 0),
+                price=price,
+                current=quantity,
+                lot_size=instrument.lot_size,
+                policy=policy,
+            )
             delta = target - quantity
             if side == "sell" and delta < 0:
                 sell = min(-delta, account.available.get(symbol, 0))
                 if sell != quantity:
                     sell = sell // instrument.lot_size * instrument.lot_size
+                if (
+                    sell
+                    and policy
+                    and weights.get(symbol, 0) > 0
+                    and sell * price < policy.minimum_trade_value
+                ):
+                    continue
                 if sell:
                     orders.append(OrderIntent(symbol, "sell", sell, price))
             elif side == "buy" and delta > 0:
+                if policy and symbol not in occupied and len(occupied) >= policy.max_positions:
+                    continue
                 value_budget = max(
                     0, min(budget / (1 + costs.commission), budget - costs.minimum_commission)
                 )
                 buy = min(
                     delta, int(value_budget / price / instrument.lot_size) * instrument.lot_size
                 )
+                if buy and policy and buy * price < policy.minimum_trade_value:
+                    continue
                 if buy:
+                    occupied.add(symbol)
                     orders.append(OrderIntent(symbol, "buy", buy, price))
                     budget -= buy * price + costs.fee(buy * price, sell=False, taxable=False)
     return orders

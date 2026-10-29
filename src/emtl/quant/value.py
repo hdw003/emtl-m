@@ -374,6 +374,9 @@ class ValueUniverse:
         self.period = None
         self.snapshots: list[dict] = []
         self.seen_financials = False
+        self.ranking: dict[str, float] = {}
+        self.rejections: dict[str, str] = {}
+        self.refreshed = False
 
     def update(
         self,
@@ -386,6 +389,7 @@ class ValueUniverse:
             date.year,
             date.month if self.spec.frequency == "monthly" else (date.month - 1) // 3,
         )
+        self.refreshed = False
         previous = self.members.copy()
         allowed = self.membership(date) if self.membership else set(prices)
         known = latest_facts(self.facts, date)
@@ -409,10 +413,15 @@ class ValueUniverse:
                 amounts,
                 tradable & allowed,
             )
+            self.ranking = {row["symbol"]: row["score"] for row in snapshot["ranking"]}
+            self.rejections = dict(snapshot["rejected"])
+            self.refreshed = True
             self.members = set(snapshot["selected"])
             self.snapshots.append(snapshot)
             self.period = period
         elif unsafe:
+            self.refreshed = True
+            self.rejections.update(dict.fromkeys(unsafe, "safety_removal"))
             self.members -= unsafe
             self.snapshots.append(
                 {

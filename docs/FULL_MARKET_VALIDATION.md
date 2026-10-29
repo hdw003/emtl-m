@@ -1,4 +1,6 @@
-# 0.6.0 全市场验证记录
+# 0.6.0 全市场验证记录（历史版本）
+
+0.7.0 已分离候选库与择优持仓层，修正整手取整并默认月度轮换；当前行为见 [VALUE_ROTATION.md](VALUE_ROTATION.md)，结果见 [VALUE_ROTATION_VALIDATION.md](VALUE_ROTATION_VALIDATION.md)。
 
 观察日期：2026-10-28（Asia/Shanghai）。
 

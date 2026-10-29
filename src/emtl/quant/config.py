@@ -12,6 +12,7 @@ from pathlib import Path
 from .engine import Backtester
 from .market import CatalogHistory, MarketSpec, MarketStore
 from .models import Costs, Instrument
+from .portfolio import PortfolioSpec
 from .risk import RiskPolicy
 from .strategies import StrategySpec
 from .value import Fundamental, ValueSpec, ValueStore, ValueUniverse
@@ -31,10 +32,20 @@ class QuantConfig:
     value: ValueSpec | None = None
     data_provider: str = "eastmoney"
     market: MarketSpec | None = None
+    portfolio: PortfolioSpec | None = None
 
-    def engine(self, *, value_facts: list[Fundamental] | None = None) -> Backtester:
+    def engine(
+        self,
+        *,
+        value_facts: list[Fundamental] | None = None,
+        selection_ranking: dict[str, float] | None = None,
+    ) -> Backtester:
         if self.market and not self.instruments:
             raise ValueError("full-market catalog is not published; run quant market-scan first")
+        if self.portfolio and self.value is None and selection_ranking is None:
+            raise ValueError(
+                "[portfolio] needs [value] or an explicitly labeled frozen research ranking"
+            )
         return Backtester(
             self.instruments,
             self.strategy,
@@ -57,12 +68,18 @@ class QuantConfig:
             if self.value
             else None,
             fractional_action=self.market.fractional_action if self.market else "error",
+            allocation=self.portfolio,
+            selection_ranking=selection_ranking,
         )
 
     def fingerprint(self) -> str:
         content = asdict(self)
         content["engine_model_version"] = 1
         content.pop("data")  # Moving a byte-identical dataset does not change its semantics.
+        if self.portfolio is None:
+            content.pop("portfolio")
+        else:
+            content["portfolio_model_version"] = 1
         if self.market is None:
             content.pop("market")
         else:
@@ -96,6 +113,7 @@ def load_config(path: Path) -> QuantConfig:
         "value",
         "data_provider",
         "market",
+        "portfolio",
     }
     if set(raw) - allowed:
         raise ValueError(f"unknown config keys: {sorted(set(raw) - allowed)}")
@@ -132,6 +150,7 @@ def load_config(path: Path) -> QuantConfig:
             value=ValueSpec(**value_raw) if value_raw is not None else None,
             data_provider=raw.get("data_provider", "eastmoney"),
             market=market,
+            portfolio=PortfolioSpec(**raw["portfolio"]) if "portfolio" in raw else None,
             **{key: raw[key] for key in ("initial_cash", "rebalance") if key in raw},
             **{key: dt.date.fromisoformat(str(raw[key])) for key in ("start", "end") if key in raw},
         )

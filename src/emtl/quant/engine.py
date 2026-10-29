@@ -12,6 +12,7 @@ from itertools import pairwise
 from statistics import mean, stdev
 
 from .models import Bar, Costs, EquityPoint, Fill, Instrument, Portfolio, Position, finite
+from .portfolio import PortfolioSpec, select_portfolio, target_quantity
 from .risk import RiskPolicy
 from .strategies import Strategy
 from .value import ValueUniverse
@@ -29,6 +30,7 @@ class BacktestResult:
     universe_history: list[dict] = field(default_factory=list)
     value_status: dict | None = None
     holdings: list[tuple[dt.date, frozenset[str]]] = field(default_factory=list)
+    allocation_history: list[dict] = field(default_factory=list)
 
     def metrics(self) -> dict[str, float | int | None]:
         if not self.curve:
@@ -79,6 +81,8 @@ class Backtester:
         rebalance: str = "monthly",
         universe: ValueUniverse | None = None,
         fractional_action: str = "error",
+        allocation: PortfolioSpec | None = None,
+        selection_ranking: dict[str, float] | None = None,
     ) -> None:
         finite(initial_cash, "initial_cash", minimum=1)
         self.instruments = {i.symbol: i for i in instruments}
@@ -94,6 +98,12 @@ class Backtester:
         if fractional_action not in {"error", "floor"}:
             raise ValueError("fractional_action must be error or floor")
         self.fractional_action = fractional_action
+        self.allocation = allocation
+        self.selection_ranking = selection_ranking
+        if allocation and universe is None and selection_ranking is None:
+            raise ValueError(
+                "value-ranked allocation requires observed or explicitly frozen scores"
+            )
 
     def run(
         self, bars: Sequence[Bar], *, start: dt.date | None = None, end: dt.date | None = None
@@ -206,7 +216,11 @@ class Backtester:
             period = _period(date, self.rebalance)
             if result.halted:
                 pending = {}
-            elif period != last_period or pool_changed:
+            elif (
+                period != last_period
+                or pool_changed
+                or (self.allocation and self.universe and self.universe.refreshed)
+            ):
                 # Do not open new positions from stale or missing bars.
                 eligible = {
                     s: values
@@ -218,6 +232,38 @@ class Backtester:
                 raw = self.strategy.weights(eligible, portfolio.weights(prices))
                 if set(raw) - set(eligible):
                     raise ValueError("strategy returned an unknown or ineligible symbol")
+                if self.allocation:
+                    raw = {
+                        s: w
+                        for s, w in raw.items()
+                        if index >= blocked_until.get(s, -1) and s not in forced
+                    }
+                    raw, decision = select_portfolio(
+                        self.allocation,
+                        raw,
+                        portfolio.weights(prices),
+                        self.universe.ranking if self.universe else self.selection_ranking,
+                        prices,
+                        self.instruments,
+                        equity=equity,
+                        max_gross=self.risk.max_gross,
+                        max_position=self.risk.max_position,
+                    )
+                    if self.universe:
+                        for symbol in decision["exits"]:
+                            if symbol not in self.universe.members:
+                                decision["exit_reasons"][symbol] = self.universe.rejections.get(
+                                    symbol, "outside_value_universe"
+                                )
+                    decision.update(
+                        {
+                            "date": str(date),
+                            "trigger": "value_refresh"
+                            if self.universe and self.universe.refreshed
+                            else "scheduled",
+                        }
+                    )
+                    result.allocation_history.append(decision)
                 pending = self.risk.constrain(raw, history)
                 pending = {s: w for s, w in pending.items() if index >= blocked_until.get(s, -1)}
             if forced:
@@ -258,8 +304,14 @@ class Backtester:
         portfolio = result.portfolio
         equity = portfolio.equity(opening)
         targets = {
-            s: int(equity * weights.get(s, 0) / price / self.instruments[s].lot_size)
-            * self.instruments[s].lot_size
+            s: target_quantity(
+                equity=equity,
+                weight=weights.get(s, 0),
+                price=price,
+                current=portfolio.positions.get(s, Position()).quantity,
+                lot_size=self.instruments[s].lot_size,
+                policy=self.allocation,
+            )
             for s, price in opening.items()
         }
         # Sell first. Each symbol gets at most one fill per session. Combined
@@ -324,6 +376,21 @@ class Backtester:
                     )
                     price = min(price, boundary) if side == "buy" else max(price, boundary)
                 if side == "buy":
+                    if (
+                        self.allocation
+                        and not current
+                        and sum(p.quantity > 0 for p in portfolio.positions.values())
+                        >= self.allocation.max_positions
+                    ):
+                        result.events.append(
+                            {
+                                "date": str(date),
+                                "symbol": symbol,
+                                "side": side,
+                                "reason": "holding_slots_occupied",
+                            }
+                        )
+                        continue
                     # A blocked sell must not be treated as freed exposure.
                     # Limit buys against the actual portfolio after sell fills.
                     equity_now = portfolio.equity(opening)
@@ -357,6 +424,21 @@ class Backtester:
                         > portfolio.cash
                     ):
                         quantity -= instrument.lot_size
+                if (
+                    self.allocation
+                    and quantity > 0
+                    and weights.get(symbol, 0) > 0
+                    and quantity * price < self.allocation.minimum_trade_value
+                ):
+                    result.events.append(
+                        {
+                            "date": str(date),
+                            "symbol": symbol,
+                            "side": side,
+                            "reason": "below_minimum_trade_value",
+                        }
+                    )
+                    continue
                 if quantity <= 0:
                     result.events.append(
                         {

@@ -7,5 +7,5 @@ mkdir -p .quant
 exec flock -n .quant/full-market-daily.lock .venv/bin/emt quant daily \
   --config examples/quant/full_market.toml \
   --start 2024-01-01 \
-  --database .quant/full-market-paper.sqlite3 \
-  --output .quant/full-market-paper.json "$@"
+  --database .quant/full-market-rotation-paper.sqlite3 \
+  --output .quant/full-market-rotation-paper.json "$@"

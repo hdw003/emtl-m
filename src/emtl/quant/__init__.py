@@ -7,6 +7,7 @@ from .execution import EMTBroker
 from .models import Bar, Costs, Instrument, OrderIntent
 from .paper import run_paper
 from .planning import AccountSnapshot, plan_rebalance
+from .portfolio import PortfolioSpec
 from .risk import RiskPolicy
 from .strategies import STRATEGIES, StrategySpec
 from .value import Fundamental, ValueSpec, ValueStore, ValueUniverse, screen_value
@@ -23,6 +24,7 @@ __all__ = [
     "Fundamental",
     "Instrument",
     "OrderIntent",
+    "PortfolioSpec",
     "QuantConfig",
     "RiskPolicy",
     "StrategySpec",

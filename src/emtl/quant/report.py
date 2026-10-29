@@ -30,8 +30,10 @@ def report(result: BacktestResult, config: QuantConfig) -> dict:
         "events": result.events,
         "value_pools": result.universe_history,
         "value_status": result.value_status,
+        "portfolio_decisions": result.allocation_history,
         "assumptions": {
             "data_provider": config.data_provider,
+            "portfolio_policy": asdict(config.portfolio) if config.portfolio else None,
             "value_policy": {k: v for k, v in asdict(config.value).items() if k != "fundamentals"}
             if config.value
             else None,

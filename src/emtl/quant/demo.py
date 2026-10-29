@@ -136,3 +136,82 @@ def create_value_demo(directory: Path) -> Path:
             )
     ValueStore(directory / "fundamentals.sqlite3").append(facts)
     return config
+
+
+def create_rotation_demo(directory: Path) -> Path:
+    """Synthetic audit: A becomes overpriced in February; B in March."""
+    directory.mkdir(parents=True, exist_ok=True)
+    config = directory / "strategy.toml"
+    if (
+        config.exists()
+        or (directory / "bars.csv").exists()
+        or (directory / "fundamentals.sqlite3").exists()
+    ):
+        raise ValueError("rotation demo exists; choose a new directory to preserve the experiment")
+    symbols = ("600000.SH", "000001.SZ", "600004.SH")
+    start = dt.date(2024, 1, 2)
+    data = []
+    for offset in range(179):
+        date = start + dt.timedelta(days=offset)
+        if date.weekday() >= 5:
+            continue
+        for symbol in symbols:
+            price = (
+                60
+                if symbol == symbols[0] and date >= dt.date(2024, 1, 31)
+                else 30
+                if symbol == symbols[1] and date >= dt.date(2024, 3, 1)
+                else 10
+            )
+            data.append(Bar(date, symbol, price, price, price, price, 10_000_000))
+    write_csv(directory / "bars.csv", data)
+    facts = [
+        Fundamental(
+            s,
+            dt.date(2022, 12, 31),
+            dt.date(2023, 4, 1),
+            start,
+            dt.date(2000, 1, 1),
+            f"SYNTHETIC-{label}",
+            "合成工业",
+            eps,
+            book,
+            roe,
+            3,
+            0.4,
+            source="synthetic_rotation_demo",
+        )
+        for s, label, eps, book, roe in zip(
+            symbols, ("A", "B", "C"), (2, 1, 0.8), (10, 8, 8), (0.2, 0.15, 0.1), strict=True
+        )
+    ]
+    ValueStore(directory / "fundamentals.sqlite3").append(facts)
+    text = """# SYNTHETIC FUNCTIONAL AUDIT ONLY. Price jumps are artificial; not performance evidence.
+data = "bars.csv"
+initial_cash = 100000
+rebalance = "monthly"
+[value]
+fundamentals = "fundamentals.sqlite3"
+top_n = "all"
+max_per_industry = "all"
+liquidity_window = 1
+min_daily_amount = 0
+[portfolio]
+max_positions = 1
+rank_buffer = 0
+minimum_trade_value = 5000
+rebalance_tolerance = 0.20
+[strategy]
+name = "buy_hold"
+[risk]
+max_position = 1.0
+max_gross = 0.9
+max_drawdown = 1.0
+stop_loss = 1.0
+trailing_stop = 1.0
+"""
+    # Artificial price jumps are for causal monthly replacement checks only.
+    for symbol in symbols:
+        text += f'\n[[instruments]]\nsymbol = "{symbol}"\nstamp_tax = true\n'
+    config.write_text(text, encoding="utf-8")
+    return config

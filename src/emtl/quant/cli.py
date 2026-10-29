@@ -16,7 +16,7 @@ import requests
 from .comparison import compare
 from .config import QuantConfig, load_config
 from .data import EastmoneyDailyProvider, TencentDailyProvider, load_csv, write_csv
-from .demo import create_demo, create_value_demo
+from .demo import create_demo, create_rotation_demo, create_value_demo
 from .market_scan import scan_market
 from .paper import latest_completed_date, run_paper
 from .report import report, write_json
@@ -35,6 +35,10 @@ def add_quant_parser(subparsers: argparse._SubParsersAction) -> None:
     demo.add_argument("--directory", type=Path, required=True)
     value_demo = commands.add_parser("value-demo", help="生成价值股池与长线策略结合的离线合成示例")
     value_demo.add_argument("--directory", type=Path, required=True)
+    rotation_demo = commands.add_parser(
+        "rotation-demo", help="合成月度价值轮换审计：估值过高卖出并择优补位"
+    )
+    rotation_demo.add_argument("--directory", type=Path, required=True)
     comparison = commands.add_parser(
         "compare", help="七策略、三种调仓频率对比（明确标注当前股池回看偏差）"
     )
@@ -118,6 +122,9 @@ def run_quant(args: argparse.Namespace) -> int:
             return 0
         if args.quant_command == "demo":
             print(create_demo(args.directory))
+            return 0
+        if args.quant_command == "rotation-demo":
+            print(create_rotation_demo(args.directory))
             return 0
         if args.quant_command == "value-demo":
             print(create_value_demo(args.directory))
@@ -218,7 +225,7 @@ def run_quant(args: argparse.Namespace) -> int:
                 store = ValueStore(config.value.fundamentals)
                 for snapshot in result.universe_history:
                     store.save_pool(snapshot)
-        # Equal-universe buy-and-hold under the same costs, cash and risk limits.
+        # Equal-weight reference under the same candidate, allocation and risk rules.
         if args.quant_command == "backtest" and config.strategy.name != "buy_hold":
             baseline = config.engine()
             baseline.strategy = StrategySpec(name="buy_hold")

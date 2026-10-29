@@ -2,7 +2,7 @@
 data = "../../.quant/full-market-daily.csv"
 data_provider = "tencent" # 显式备用未复权日线源，不自动混合两家数据
 initial_cash = 1000000
-rebalance = "weekly"
+rebalance = "monthly"
 
 [value]
 fundamentals = "../../.quant/full-market-fundamentals.sqlite3"
@@ -22,6 +22,13 @@ earnings_weight = 0.4
 book_weight = 0.3
 quality_weight = 0.3
 excluded_industries = ["银行", "保险", "证券"]
+
+[portfolio]
+# 候选股池无限制；此处只限制实际资金持仓，月度择优并保留排名缓冲。
+max_positions = 10
+rank_buffer = 5
+rebalance_tolerance = 0.20
+minimum_trade_value = 5000
 
 [strategy]
 name = "dual_ma" # 也可换 momentum_rotation 等已有策略
